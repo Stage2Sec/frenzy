@@ -1,18 +1,21 @@
 import moduleAlias from "module-alias"
-import { join, dirname } from "path"
+import { join, dirname, isAbsolute } from "path"
 import { parse } from "comment-json"
 import { readFileSync, readdirSync, statSync } from "fs"
 
 function registerAliases(configPath: string) {
-    let fullConfigPath = join(__dirname, configPath)
-    let config = parse(readFileSync(fullConfigPath).toString())
+    if (!isAbsolute(configPath)) {
+        configPath = join(__dirname, configPath)
+    }
+    let absolutePath = configPath
+    let config = parse(readFileSync(absolutePath).toString())
 
     let options = config.compilerOptions
     if (!options.paths) {
         return
     }
 
-    let baseUrl = dirname(fullConfigPath)
+    let baseUrl = dirname(absolutePath)
     if (options.baseUrl) {
         baseUrl = join(baseUrl, options.baseUrl)
     }
@@ -27,14 +30,14 @@ function registerAliases(configPath: string) {
 
 registerAliases("../../tsconfig.json")
 
-let pluginsDir = "../plugins"
-let dirs = readdirSync(join(__dirname, pluginsDir))
-for (const dir of dirs) {
-    if (!statSync(join(__dirname, pluginsDir, dir)).isDirectory()){
+let pluginsDir = join(__dirname, "../plugins")
+for (const dir of readdirSync(pluginsDir)) {
+    let path = join(pluginsDir, dir)
+    if (!statSync(path).isDirectory()){
         continue
     }
 
-    registerAliases(`../plugins/${dir}/tsconfig.json`)
+    registerAliases(join(path, "tsconfig.json"))
 }
 
 export {}

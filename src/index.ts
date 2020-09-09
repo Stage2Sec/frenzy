@@ -6,7 +6,7 @@ import { createEventAdapter } from "@slack/events-api"
 import { createMessageAdapter } from "@slack/interactive-messages"
 import { promises as fs } from "fs"
 
-import { asEventEmitter, AppInfo, PluginInfo, Plugin } from "@frenzy/util";
+import { asEventEmitter, PluginInfo, Plugin, Slack, SlackEventsHandler } from "@frenzy/util";
 import { join } from "path";
 
 const port = process.env.PORT || 3000
@@ -28,25 +28,22 @@ asEventEmitter(slackEvents)?.on("error", (error) => {
 })
 
 const pluginsLoaded: Array<PluginInfo> = []
-let appInfo: AppInfo = {
-    express: app,
-    slack: {
-        webClient: slackClient,
-        events: slackEvents,
-        interactions: slackInteractions
-    }
-}
-
 async function loadPlugins(){
     let pluginsDir = join(__dirname, "./plugins")
     let dirs = await fs.readdir(pluginsDir)
-    for (const dir of dirs) {
-        if (!(await fs.stat(join(pluginsDir, dir))).isDirectory()){
+    for (const name of dirs) {
+        if (!(await fs.stat(join(pluginsDir, name))).isDirectory()){
             continue
         }
 
-        let plugin: Plugin = require(`@plugins/${dir}/`).default
-        let info = plugin(appInfo)
+        let plugin: Plugin = require(`@plugins/${name}/`).default
+
+        let slack: Slack = {
+            webClient: slackClient,
+            events: new SlackEventsHandler(name, slackEvents),
+            interactions: slackInteractions
+        }
+        let info = plugin(slack)
         if (info instanceof Promise) {
             info = await info
         }
