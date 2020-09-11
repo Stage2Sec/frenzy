@@ -7,7 +7,7 @@ import { createEventAdapter } from "@slack/events-api"
 import { createMessageAdapter } from "@slack/interactive-messages"
 import { promises as fs } from "fs"
 
-import { asEventEmitter, PluginInfo, Plugin, Slack } from "@frenzy/util";
+import { asEventEmitter, PluginInfo, Plugin, Slack } from "@frenzy/index";
 import { join } from "path";
 
 const port = process.env.PORT || 3000
