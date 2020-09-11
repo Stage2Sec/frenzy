@@ -28,9 +28,9 @@ function registerAliases(configPath: string) {
     })
 }
 
-registerAliases("../../tsconfig.json")
+registerAliases("../tsconfig.json")
 
-let pluginsDir = join(__dirname, "../plugins")
+let pluginsDir = join(__dirname, "plugins")
 for (const dir of readdirSync(pluginsDir)) {
     let path = join(pluginsDir, dir)
     if (!statSync(path).isDirectory()){

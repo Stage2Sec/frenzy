@@ -1,4 +1,5 @@
-import "./lib/aliases"
+import "./extensions"
+import "./aliases"
 import "cross-fetch/polyfill"
 import express from "express";
 import { WebClient } from "@slack/web-api"
