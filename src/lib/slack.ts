@@ -5,7 +5,7 @@ import commander from "commander"
 import stringArgv from 'string-argv';
 import { 
     View, Option, InputBlock, Button, DividerBlock, SectionBlock, Overflow,
-    Datepicker, Select, MultiSelect, Action, ImageElement, RadioButtons, Checkboxes, ViewsUpdateArguments 
+    Datepicker, Select, MultiSelect, Action, ImageElement, RadioButtons, Checkboxes, ActionsBlock, PlainTextElement, MrkdwnElement, HeaderBlock, StaticSelect, PlainTextInput, ExternalSelect, MultiExternalSelect, MultiStaticSelect 
 } from "@slack/web-api/dist/methods"
 import { EventEmitter } from "events"
 import axios from "axios"
@@ -16,8 +16,7 @@ export type SlackModal = Omit<View, "type">
 export interface ModalOpenArguments extends WebAPICallOptions, TokenOverridable {
     trigger_id: string;
     modal: SlackModal;
-}
-export interface ModalUpdateArguments extends WebAPICallOptions, TokenOverridable {
+}export interface ModalUpdateArguments extends WebAPICallOptions, TokenOverridable {
     view_id: string;
     modal: SlackModal;
     external_id?: string;
@@ -86,7 +85,7 @@ export class Slack {
     public postMessage(options: ChatPostMessageArguments) {
         return this.client.chat.postMessage(options)
     }
-    public openModal(options: ModalOpenArguments) {
+    public async openModal(options: ModalOpenArguments) {
         let view: View = {
             ...options.modal,
             type: "modal"
@@ -96,45 +95,56 @@ export class Slack {
             ...options,
             view: view
         }
-        return this.client.views.open(openOptions)
-        .catch(error => console.error("Error opening modal\n", error))
+        
+        try {
+            return await this.client.views.open(openOptions)
+        } catch (error) {
+            console.error("Error opening modal\n", error)
+        }
     }
 
-    
     public updateModal(view: View): Promise<WebAPICallResult>
+    public updateModal(view: View, update: (view: View, metadata: any) => void | Promise<void>): Promise<WebAPICallResult>
     public updateModal(options: ModalUpdateArguments): Promise<WebAPICallResult>
-    public updateModal(x: any){
-        if (isModalOptions(x)) {
-            let options: ModalUpdateArguments = x
-            let view: View = {
-                ...options.modal,
-                type: "modal"
-            }
-
-            return this.client.views.update({
-                ...options,
-                view: view
-            })
-            .catch(error => console.error("Error updating modal\n", error))
-        }
-
-        if (isView(x)) {
-            let view = x
-            return this.client.views.update({
-                view_id: view.id,
-                view: {
-                    type: view.type,
-                    blocks: view.blocks,
-                    callback_id: view.callback_id,
-                    close: view.close,
-                    submit: view.submit,
-                    title: view.title,
-                    clear_on_close: view.clear_on_close,
-                    notify_on_close: view.notify_on_close,
-                    private_metadata: view.private_metadata
+    public async updateModal(x: any){
+        try {
+            if (isModalOptions(x)) {
+                let options: ModalUpdateArguments = x
+                let view: View = {
+                    ...options.modal,
+                    type: "modal"
                 }
-            })
-            .catch(error => console.error("Error updating modal\n", error))
+    
+                return await this.client.views.update({
+                    ...options,
+                    view: view
+                })
+            }
+    
+            if (isView(x)) {
+                let view = x
+                if (arguments.length > 1) {
+                    let update: (view: View, metadata: any) => void | Promise<void> = arguments[1]
+                    await this.updateMetadata(view, metadata => update(view, metadata))
+                }
+    
+                return await this.client.views.update({
+                    view_id: view.id,
+                    view: {
+                        type: view.type,
+                        blocks: view.blocks,
+                        callback_id: view.callback_id,
+                        close: view.close,
+                        submit: view.submit,
+                        title: view.title,
+                        clear_on_close: view.clear_on_close,
+                        notify_on_close: view.notify_on_close,
+                        private_metadata: view.private_metadata
+                    }
+                })
+            }
+        } catch (error) {
+            console.error("Error updating modal\n", error)
         }
 
         function isView(obj: any): obj is View & {id: string} {
@@ -144,7 +154,7 @@ export class Slack {
             return (obj as ModalUpdateArguments).modal !== undefined
         }
     }
-    
+
     public async getFile(url: string) {
         let response = await axios.get(url, {
             headers: {
@@ -160,67 +170,122 @@ export class Slack {
     public getOptions(actionId: string) {
         return this.optionsByActionId[actionId]
     }
+
+    public async updateMetadata(view: View, action: (metadata: any) => void | Promise<void>) {
+        let metadata = this.getMetadata(view)
+        let result = action(metadata)
+        if (result instanceof Promise) {
+            await result
+        }
+        view.private_metadata = JSON.stringify(metadata)
+    }
+    public getMetadata(view: View) {
+        return view.private_metadata ? JSON.parse(view.private_metadata) : {}
+    }
 }
+
 export class SlackBlockFactory {
     public section(options: {
         text: string,
         blockId?: string,
-        accessory?: Button | Overflow | Datepicker | Select | MultiSelect | Action | ImageElement | RadioButtons | Checkboxes
+        fields?: (PlainTextElement | MrkdwnElement)[],
+        accessory?: Button | Overflow | Datepicker | Select | MultiSelect | Action | ImageElement | RadioButtons | Checkboxes,
+        markdown?: false
     }): SectionBlock {
         return {
             type: "section",
             block_id: options.blockId,
             accessory: options.accessory,
-            text: {
-                text: options.text,
-                type: "plain_text",
-                emoji: true
-            }
+            fields: options.fields,
+            text: options.markdown ? this.markdown(options.text) : this.plainText(options.text)
+        }
+    }
+    public plainText(text: string): PlainTextElement{
+        return {
+            type: "plain_text",
+            text: text,
+            emoji: true
+        }
+    }
+    public markdown(text: string): MrkdwnElement {
+        return {
+            type: "mrkdwn",
+            text: text
         }
     }
     public option(label: string, value: any): Option {
         return {
-            text: {
-                text: label,
-                type: "plain_text",
-                emoji: true
-            },
+            text: this.plainText(label),
             value: `${value}`
         }
     }
-    public externalSelect(options: {
+    public input(options: {
         blockId: string,
         label: string,
-        placeholder: string,
-        actionId?: string,
-        multi?: boolean
+        optional?: boolean,
+        element: Select | MultiSelect | Datepicker | PlainTextInput | RadioButtons | Checkboxes
     }): InputBlock {
+        return {
+            type: "input",
+            block_id: options.blockId,
+            element: options.element,
+            label: this.plainText(options.label),
+            optional: options.optional
+        }
+    }
+    public externalSelect(options: {
+        placeholder?: string,
+        actionId?: string,
+        multi?: boolean,
+        minLength?: number
+    }): ExternalSelect | MultiExternalSelect {
         if (!options.actionId) {
             options.actionId = "selection"
         }
-        let elementType: "multi_external_select" | "external_select" = "external_select"
-        if (options.multi) {
-            elementType = "multi_external_select"
-        }
         
-        return {
-            block_id: options.blockId,
-            type: "input",
-            label: {
-                type: "plain_text",
-                text: options.label,
-                emoji: true
-            },
-            element: {
-                type: elementType,
+        let placeholder
+        if (options.placeholder) {
+            placeholder = this.plainText(options.placeholder)
+        }
+        if (options.multi) {
+            return {
+                type: "multi_external_select",
                 action_id: options.actionId,
-                min_query_length: 1,
-                placeholder: {
-                    text: options.placeholder,
-                    type: "plain_text",
-                    emoji: true
-                }
+                min_query_length: options.minLength,
+                placeholder: placeholder
             }
+        }
+
+        return {
+            type: "external_select",
+            action_id: options.actionId,
+            placeholder: placeholder,
+            min_query_length: options.minLength
+        }
+    }
+    public staticSelect(options: {
+        actionId?: string,
+        placeholder?: string,
+        options: Array<Option>,
+        initialOption?: Option,
+        multi?: boolean
+    }): StaticSelect | MultiStaticSelect {
+        if (options.multi) {
+            return {
+                type: "multi_static_select",
+                action_id: options.actionId,
+                options: options.options,
+                initial_options: options.initialOption ? [options.initialOption] : undefined,
+                placeholder: options.placeholder ? this.plainText(options.placeholder) : undefined
+            }
+        }
+
+        return {
+            type: "static_select",
+            action_id: options.actionId,
+            options: options.options,
+            initial_option: options.initialOption,
+            placeholder: options.placeholder ? this.plainText(options.placeholder) : undefined
         }
     }
     public button(options: {
@@ -233,11 +298,7 @@ export class SlackBlockFactory {
             type: "button",
             action_id: options.actionId,
             style: options.style,
-            text: {
-                type: "plain_text",
-                text: options.text,
-                emoji: true
-            },
+            text: this.plainText(options.text),
             value: options.value
         }
     }
@@ -254,11 +315,7 @@ export class SlackBlockFactory {
         return {
             type: "input",
             block_id: options.blockId,
-            label: {
-                text: options.label,
-                type: "plain_text",
-                emoji: true
-            },
+            label: this.plainText(options.label),
             element: {
                 type: "radio_buttons",
                 action_id: options.actionId,
@@ -269,6 +326,26 @@ export class SlackBlockFactory {
     public divider(): DividerBlock {
         return {
             type: "divider"
+        }
+    }
+    public header(options: {
+        text: string,
+        blockId?: string
+    }): HeaderBlock {
+        return {
+            type: "header",
+            block_id: options.blockId,
+            text: this.plainText(options.text)
+        }
+    }
+    public actions(options: {
+        blockId: string,
+        elements: (Button | Overflow | Datepicker | Select | RadioButtons | Checkboxes | Action)[];
+    }): ActionsBlock {
+        return {
+            type: "actions",
+            block_id: options.blockId,
+            elements: options.elements
         }
     }
 }

@@ -15,7 +15,19 @@ declare global {
     }
 
     interface Array<T> {
-        firstOrDefault(): T
+        /**
+         * Returns the first element of the array or undefined if the array is empty
+         */
+        first(): T
+
+        /**
+         * Returns the first element of the array or undefined if the array is empty
+         * and casts it as the specified type
+         */
+        firstAs<TFirst>(): TFirst
+
+        ofType<TFilter>(typeCheck: (obj: TFilter) => boolean): Array<TFilter>
+        asType<TAs>(): Array<TAs>
     }
 }
 
@@ -29,11 +41,29 @@ String.prototype.iIncludes = function(searchString: string) {
     return this.toLowerCase().includes(searchString.toLowerCase())
 }
 
-Array.prototype.firstOrDefault = function () {
+Array.prototype.first = function () {
     if (this.length > 0) {
         return this[0]
     }
     return undefined
+}
+Array.prototype.firstAs = function<TFirst>() {
+    return this.first() as TFirst
+}
+
+Array.prototype.ofType = function<TFilter>(typeCheck: (obj: TFilter) => boolean) {
+    let filterArray: Array<TFilter> = []
+    this.filter(element => isTFilter(element)).forEach(element => {
+      filterArray.push(element)  
+    })
+    return filterArray
+
+    function isTFilter(obj: any): obj is TFilter {
+        return typeCheck(obj as TFilter)
+    }
+}
+Array.prototype.asType = function<TAs>() {
+    return this.map(e => e as TAs)
 }
 
 export {}
