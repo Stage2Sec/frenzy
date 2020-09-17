@@ -19,15 +19,8 @@ declare global {
          */
         first(): T
 
-        /**
-         * Returns the first element of the array or undefined if the array is empty
-         * and casts it as the specified type
-         */
-        firstAs<S>(): S
-
         findAs<S extends T>(predicate: (value: T, index: number, obj: T[]) => unknown, thisArg?: any): S
 
-        ofType<S>(typeCheck: (obj: S) => boolean): Array<S>
         asType<S>(): Array<S>
 
         /**
@@ -54,21 +47,6 @@ Array.prototype.first = function () {
         return this[0]
     }
     return undefined
-}
-Array.prototype.firstAs = function<S>() {
-    return this.first() as S
-}
-
-Array.prototype.ofType = function<S>(typeCheck: (obj: S) => boolean) {
-    let filterArray: Array<S> = []
-    this.filter(element => isType(element)).forEach(element => {
-      filterArray.push(element)  
-    })
-    return filterArray
-
-    function isType(obj: any): obj is S {
-        return typeCheck(obj as S)
-    }
 }
 Array.prototype.asType = function<S>() {
     return this.map(e => e as S)
