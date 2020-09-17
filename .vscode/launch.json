@@ -13,6 +13,7 @@
             "skipFiles": [
                 "<node_internals>/**"
             ],
+            "internalConsoleOptions": "openOnSessionStart",
             "cwd": "${workspaceFolder}",
             "outFiles": [
                 "${workspaceFolder}/dist/**/*.js"

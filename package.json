@@ -5,10 +5,9 @@
   "main": "dist/src/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "serve": "node dist/src/index.js",
     "clean": "rm -rf dist/",
     "build": "npm run clean && tsc -b && ./copy-configs.sh",
-    "start": "npm run build && npm run serve"
+    "start": "node dist/src/index.js"
   },
   "author": "",
   "license": "ISC",

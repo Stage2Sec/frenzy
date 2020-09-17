@@ -18,18 +18,14 @@ const slackClient = new WebClient(slackToken);
 const slackInteractions = createMessageAdapter(slackSigningSecret);
 const slackEvents = createEventAdapter(slackSigningSecret);
 
-const app = express()
-app.use('/slack/actions', slackInteractions.requestListener());
-app.use('/slack/events', slackEvents.requestListener());
-
 // There is an issue with the typings for the SlackEventAdapter
 // where it thinks that the class doesn't inherit from the EventEmitter class
 asEventEmitter(slackEvents)?.on("error", (error) => {
     console.log(error)
 })
 
-const pluginsLoaded: Array<PluginInfo> = []
-async function loadPlugins(){
+const pluginsLoaded: Array<PluginInfo> = [];
+(async function(){
     let pluginsDir = join(__dirname, "./plugins")
     let dirs = await fs.readdir(pluginsDir)
     for (const name of dirs) {
@@ -51,8 +47,11 @@ async function loadPlugins(){
             console.error(`Error loading plugin ${name}`, error)
         }
     }
-}
-loadPlugins()
+})()
+
+const app = express()
+app.use('/slack/actions', slackInteractions.expressMiddleware());
+app.use('/slack/events', slackEvents.expressMiddleware());
 
 app.listen(port, () => {
     console.log(`App listening at http://localhost:${port}`)

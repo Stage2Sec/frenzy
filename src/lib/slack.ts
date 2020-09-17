@@ -5,7 +5,9 @@ import commander from "commander"
 import stringArgv from 'string-argv';
 import { 
     View, Option, InputBlock, Button, DividerBlock, SectionBlock, Overflow,
-    Datepicker, Select, MultiSelect, Action, ImageElement, RadioButtons, Checkboxes, ActionsBlock, PlainTextElement, MrkdwnElement, HeaderBlock, StaticSelect, PlainTextInput, ExternalSelect, MultiExternalSelect, MultiStaticSelect 
+    Datepicker, Select, MultiSelect, Action, ImageElement, RadioButtons, Checkboxes,
+    ActionsBlock, PlainTextElement, MrkdwnElement, HeaderBlock, StaticSelect, PlainTextInput,
+    ExternalSelect, MultiExternalSelect, MultiStaticSelect, ViewsPushArguments 
 } from "@slack/web-api/dist/methods"
 import { EventEmitter } from "events"
 import axios from "axios"
@@ -16,11 +18,16 @@ export type SlackModal = Omit<View, "type">
 export interface ModalOpenArguments extends WebAPICallOptions, TokenOverridable {
     trigger_id: string;
     modal: SlackModal;
-}export interface ModalUpdateArguments extends WebAPICallOptions, TokenOverridable {
-    view_id: string;
+}
+interface ModalPushArguments {
     modal: SlackModal;
-    external_id?: string;
-    hash?: string;
+}
+export interface ApiModalPushArguments extends WebAPICallOptions, TokenOverridable, ModalPushArguments {
+    pushMethod: "api"
+    trigger_id: string;
+}
+export interface ResponseActionModalPushArguments extends ModalPushArguments {
+    pushMethod: "responseAction"
 }
 export class Slack {
     constructor(webClient: WebClient, events: SlackEventAdapter, interactions: SlackMessageAdapter){
@@ -102,25 +109,49 @@ export class Slack {
             console.error("Error opening modal\n", error)
         }
     }
+    public pushModal(options: ResponseActionModalPushArguments)
+    public pushModal(options: ApiModalPushArguments): Promise<WebAPICallResult>
+    public async pushModal(options: any) {
+        if (isResponseAction(options)) {
+            return {
+                response_action: "push",
+                view: {
+                    type: "modal",
+                    ...options.modal
+                }
+            }
+        }
+
+        if (isApi(options)) {
+            let view: View = {
+                ...options.modal,
+                type: "modal"
+            }
+    
+            let pushOptions: ViewsPushArguments = {
+                ...options,
+                view: view
+            }
+    
+            try {
+                return await this.client.views.push(pushOptions)
+            } catch (error) {
+                console.error("Error pushing modal\n", error)
+            }
+        }
+
+        function isResponseAction(obj: any): obj is ResponseActionModalPushArguments {
+            return (obj as ResponseActionModalPushArguments).pushMethod == "responseAction"
+        }
+        function isApi(obj: any): obj is ApiModalPushArguments {
+            return (obj as ApiModalPushArguments).pushMethod == "api"
+        }
+    }
 
     public updateModal(view: View): Promise<WebAPICallResult>
     public updateModal(view: View, update: (view: View, metadata: any) => void | Promise<void>): Promise<WebAPICallResult>
-    public updateModal(options: ModalUpdateArguments): Promise<WebAPICallResult>
     public async updateModal(x: any){
         try {
-            if (isModalOptions(x)) {
-                let options: ModalUpdateArguments = x
-                let view: View = {
-                    ...options.modal,
-                    type: "modal"
-                }
-    
-                return await this.client.views.update({
-                    ...options,
-                    view: view
-                })
-            }
-    
             if (isView(x)) {
                 let view = x
                 if (arguments.length > 1) {
@@ -149,9 +180,6 @@ export class Slack {
 
         function isView(obj: any): obj is View & {id: string} {
             return (obj as View).private_metadata !== undefined
-        }
-        function isModalOptions(obj: any): obj is ModalUpdateArguments {
-            return (obj as ModalUpdateArguments).modal !== undefined
         }
     }
 
@@ -182,6 +210,61 @@ export class Slack {
     public getMetadata(view: View) {
         return view.private_metadata ? JSON.parse(view.private_metadata) : {}
     }
+
+    private getViewInput(options: {
+        view: View,
+        blockId: string,
+        actionId: string
+    }) {
+        let block = (options.view as any).state?.values[options.blockId]
+        if (!block) {
+            return
+        }
+        return block[options.actionId]
+    }
+
+    public getSelectedOption(options: {
+        view: View,
+        blockId: string,
+        actionId?: string
+    }) {
+        if (!options.actionId) {
+            options.actionId = "selection"
+        }
+
+        let input = this.getViewInput({
+            view: options.view,
+            blockId: options.blockId,
+            actionId: options.actionId
+        })
+
+        return input?.selected_option.value
+    }
+    public getSelectedOptions(options: {
+        view: View,
+        blockId: string,
+        actionId?: string
+    }): Array<string> {
+        if (!options.actionId) {
+            options.actionId = "selection"
+        }
+
+        let input = this.getViewInput({
+            view: options.view,
+            blockId: options.blockId,
+            actionId: options.actionId
+        })
+
+        return input?.selected_options.map(o => o.value)
+    }
+    public getPlainTextValue(options: {
+        view: View,
+        blockId: string,
+        actionId: string
+    }) {
+        let input = this.getViewInput(options)
+        return input?.value
+    }
 }
 
 export class SlackBlockFactory {
@@ -190,7 +273,7 @@ export class SlackBlockFactory {
         blockId?: string,
         fields?: (PlainTextElement | MrkdwnElement)[],
         accessory?: Button | Overflow | Datepicker | Select | MultiSelect | Action | ImageElement | RadioButtons | Checkboxes,
-        markdown?: false
+        markdown?: boolean
     }): SectionBlock {
         return {
             type: "section",
@@ -270,6 +353,9 @@ export class SlackBlockFactory {
         initialOption?: Option,
         multi?: boolean
     }): StaticSelect | MultiStaticSelect {
+        if (!options.actionId) {
+            options.actionId = "selection"
+        }
         if (options.multi) {
             return {
                 type: "multi_static_select",
@@ -346,6 +432,14 @@ export class SlackBlockFactory {
             type: "actions",
             block_id: options.blockId,
             elements: options.elements
+        }
+    }
+    public plainTextInput(options: {
+        actionId: string
+    }): PlainTextInput {
+        return {
+            type: "plain_text_input",
+            action_id: options.actionId
         }
     }
 }
