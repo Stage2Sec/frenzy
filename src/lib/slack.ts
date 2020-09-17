@@ -1,4 +1,4 @@
-import { WebClient, ChatPostMessageArguments, ViewsOpenArguments, WebAPICallOptions, TokenOverridable, WebAPICallResult } from "@slack/web-api"
+import { WebClient, ChatPostMessageArguments, WebAPICallOptions, TokenOverridable, WebAPICallResult } from "@slack/web-api"
 import { SlackMessageAdapter } from "@slack/interactive-messages/dist/adapter"
 import { SlackEventAdapter } from "@slack/events-api/dist/adapter"
 import commander from "commander"
@@ -7,14 +7,19 @@ import {
     View, Option, InputBlock, Button, DividerBlock, SectionBlock, Overflow,
     Datepicker, Select, MultiSelect, Action, ImageElement, RadioButtons, Checkboxes,
     ActionsBlock, PlainTextElement, MrkdwnElement, HeaderBlock, StaticSelect, PlainTextInput,
-    ExternalSelect, MultiExternalSelect, MultiStaticSelect, ViewsPushArguments 
+    ExternalSelect, MultiExternalSelect, MultiStaticSelect 
 } from "@slack/web-api/dist/methods"
 import { EventEmitter } from "events"
 import axios from "axios"
 
 import { asEventEmitter } from "./util";
 
-export type SlackModal = Omit<View, "type">
+// export type SlackModal = Omit<View, "type">
+export interface SlackModal extends Omit<View, "type" | "submit" | "close" | "title"> {
+    submit?: string
+    close?: string
+    title?: string
+}
 export interface ModalOpenArguments extends WebAPICallOptions, TokenOverridable {
     trigger_id: string;
     modal: SlackModal;
@@ -35,13 +40,18 @@ export class Slack {
         this.interactions = interactions
         this.events = asEventEmitter(events)
         this.on("message", this.handleMessage.bind(this))
+
+        this.modals = new SlackModalManager(webClient)
     }
+
+    private events?: EventEmitter
+    private optionsByActionId: Record<string, Array<Option>> = {}
+    private registeredDotCommands: EventEmitter = new EventEmitter()
 
     public client: WebClient
     public interactions: SlackMessageAdapter
-    public events?: EventEmitter
-    public optionsByActionId: Record<string, Array<Option>> = {}
-    private registeredDotCommands: EventEmitter = new EventEmitter()
+    
+    public modals: SlackModalManager
 
     private on(event: string, listener: (...args: any[]) => void) {
         this.events?.on(event, listener)
@@ -86,101 +96,11 @@ export class Slack {
         this.client.chat.postMessage({
             channel: channel,
             text: error.toString(),
-            icon_emoji: ":octagonal_sign:"
+            icon_emoji: ":x:"
         })
     }
     public postMessage(options: ChatPostMessageArguments) {
         return this.client.chat.postMessage(options)
-    }
-    public async openModal(options: ModalOpenArguments) {
-        let view: View = {
-            ...options.modal,
-            type: "modal"
-        }
-        
-        let openOptions: ViewsOpenArguments = {
-            ...options,
-            view: view
-        }
-        
-        try {
-            return await this.client.views.open(openOptions)
-        } catch (error) {
-            console.error("Error opening modal\n", error)
-        }
-    }
-    public pushModal(options: ResponseActionModalPushArguments)
-    public pushModal(options: ApiModalPushArguments): Promise<WebAPICallResult>
-    public async pushModal(options: any) {
-        if (isResponseAction(options)) {
-            return {
-                response_action: "push",
-                view: {
-                    type: "modal",
-                    ...options.modal
-                }
-            }
-        }
-
-        if (isApi(options)) {
-            let view: View = {
-                ...options.modal,
-                type: "modal"
-            }
-    
-            let pushOptions: ViewsPushArguments = {
-                ...options,
-                view: view
-            }
-    
-            try {
-                return await this.client.views.push(pushOptions)
-            } catch (error) {
-                console.error("Error pushing modal\n", error)
-            }
-        }
-
-        function isResponseAction(obj: any): obj is ResponseActionModalPushArguments {
-            return (obj as ResponseActionModalPushArguments).pushMethod == "responseAction"
-        }
-        function isApi(obj: any): obj is ApiModalPushArguments {
-            return (obj as ApiModalPushArguments).pushMethod == "api"
-        }
-    }
-
-    public updateModal(view: View): Promise<WebAPICallResult>
-    public updateModal(view: View, update: (view: View, metadata: any) => void | Promise<void>): Promise<WebAPICallResult>
-    public async updateModal(x: any){
-        try {
-            if (isView(x)) {
-                let view = x
-                if (arguments.length > 1) {
-                    let update: (view: View, metadata: any) => void | Promise<void> = arguments[1]
-                    await this.updateMetadata(view, metadata => update(view, metadata))
-                }
-    
-                return await this.client.views.update({
-                    view_id: view.id,
-                    view: {
-                        type: view.type,
-                        blocks: view.blocks,
-                        callback_id: view.callback_id,
-                        close: view.close,
-                        submit: view.submit,
-                        title: view.title,
-                        clear_on_close: view.clear_on_close,
-                        notify_on_close: view.notify_on_close,
-                        private_metadata: view.private_metadata
-                    }
-                })
-            }
-        } catch (error) {
-            console.error("Error updating modal\n", error)
-        }
-
-        function isView(obj: any): obj is View & {id: string} {
-            return (obj as View).private_metadata !== undefined
-        }
     }
 
     public async getFile(url: string) {
@@ -197,18 +117,6 @@ export class Slack {
     }
     public getOptions(actionId: string) {
         return this.optionsByActionId[actionId]
-    }
-
-    public async updateMetadata(view: View, action: (metadata: any) => void | Promise<void>) {
-        let metadata = this.getMetadata(view)
-        let result = action(metadata)
-        if (result instanceof Promise) {
-            await result
-        }
-        view.private_metadata = JSON.stringify(metadata)
-    }
-    public getMetadata(view: View) {
-        return view.private_metadata ? JSON.parse(view.private_metadata) : {}
     }
 
     private getViewInput(options: {
@@ -264,6 +172,116 @@ export class Slack {
     }) {
         let input = this.getViewInput(options)
         return input?.value
+    }
+}
+
+export class SlackModalManager {
+    constructor(client: WebClient){
+        this.client = client
+    }
+
+    private client: WebClient
+
+    private toView(modal: SlackModal): View {
+        return {
+            ...modal,
+            type: "modal",
+            title: modal.title ? blockFactory.plainText(modal.title) : undefined,
+            submit: modal.submit ? blockFactory.plainText(modal.submit) : undefined,
+            close: modal.close ? blockFactory.plainText(modal.close) : undefined
+        }
+    }
+
+    private async updateMetadata(view: View, action: (metadata: any) => void | Promise<void>) {
+        let metadata = this.getMetadata(view)
+        let result = action(metadata)
+        if (result instanceof Promise) {
+            await result
+        }
+        view.private_metadata = JSON.stringify(metadata)
+    }
+    public getMetadata(view: View) {
+        return view.private_metadata ? JSON.parse(view.private_metadata) : {}
+    }
+
+    /**
+     * Opens a new modal in slack
+     */
+    public async open(options: ModalOpenArguments) {
+        try {
+            return await this.client.views.open({
+                ...options,
+                view: this.toView(options.modal)
+            })
+        } catch (error) {
+            console.error("Error opening modal\n", error)
+        }
+    }
+
+    /**
+     * Pushes a modal onto the slack modal stack via the `response_action` method
+     */
+    public push(options: ResponseActionModalPushArguments)
+
+    /**
+     * Pushes a modal onto the slack modal stack via the `api` method
+     */
+    public push(options: ApiModalPushArguments): Promise<WebAPICallResult>
+    public async push(options: any) {
+        if (isResponseAction(options)) {
+            return {
+                response_action: "push",
+                view: {
+                    type: "modal",
+                    ...options.modal
+                }
+            }
+        }
+
+        if (isApi(options)) {
+            try {
+                return await this.client.views.push({
+                    ...options,
+                    view: this.toView(options.modal)
+                })
+            } catch (error) {
+                console.error("Error pushing modal\n", error)
+            }
+        }
+
+        function isResponseAction(obj: any): obj is ResponseActionModalPushArguments {
+            return (obj as ResponseActionModalPushArguments).pushMethod == "responseAction"
+        }
+        function isApi(obj: any): obj is ApiModalPushArguments {
+            return (obj as ApiModalPushArguments).pushMethod == "api"
+        }
+    }
+
+    /**
+     * Updates an existing modal in slack
+     * @param view The modal to update
+     * @param action The action to change the view and its metadata
+     */
+    public async update(view: View & { id: string }, action: (view: View, metadata: any) => void | Promise<void>) {
+        try {
+            await this.updateMetadata(view, metadata => action(view, metadata))
+            return await this.client.views.update({
+                view_id: view.id,
+                view: {
+                    type: view.type,
+                    blocks: view.blocks,
+                    callback_id: view.callback_id,
+                    close: view.close,
+                    submit: view.submit,
+                    title: view.title,
+                    clear_on_close: view.clear_on_close,
+                    notify_on_close: view.notify_on_close,
+                    private_metadata: view.private_metadata
+                }
+            })
+        } catch (error) {
+            console.error("Error updating modal\n", error)
+        }
     }
 }
 
