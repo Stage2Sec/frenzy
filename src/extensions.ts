@@ -24,6 +24,13 @@ declare global {
         asType<S>(): Array<S>
 
         /**
+         * Flattens the arrays resulting from calling the defined callback function on each element of the array into one array
+         * @param callbackfn A function that accepts up to three arguments. The map method calls the callbackfn function one time for each element in the array.
+         * @param thisArg An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
+         */
+        mapAndFlatten<U>(callbackfn: (value: T, index: number, array: T[]) => U[], thisArg?: any): U[]
+
+        /**
          * Creates a readonly array of numbers starting at the specified number
          * @param size The size of the resulting array
          * @param startAt The number at which to start
@@ -50,6 +57,13 @@ Array.prototype.first = function () {
 }
 Array.prototype.asType = function<S>() {
     return this.map(e => e as S)
+}
+
+Array.prototype.mapAndFlatten = function<U>(callbackfn: (value: any, index: number, array: any[]) => U[], thisArg?: any): U[] {
+    return this.map(callbackfn).reduce((final, current) => {
+        current?.forEach(x => final?.push(x))
+        return final
+    }, [])
 }
 
 Array.prototype.findAs = function<S>(predicate: (value: any, index: number, obj: any[]) => unknown, thisArg?: any) : S {

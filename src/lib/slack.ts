@@ -7,14 +7,14 @@ import {
     View, Option, InputBlock, Button, DividerBlock, SectionBlock, Overflow,
     Datepicker, Select, MultiSelect, Action, ImageElement, RadioButtons, Checkboxes,
     ActionsBlock, PlainTextElement, MrkdwnElement, HeaderBlock, StaticSelect, PlainTextInput,
-    ExternalSelect, MultiExternalSelect, MultiStaticSelect 
+    ExternalSelect, MultiExternalSelect, MultiStaticSelect, ChatUpdateArguments 
 } from "@slack/web-api/dist/methods"
 import { EventEmitter } from "events"
 import axios from "axios"
 
 import { asEventEmitter } from "./util";
 
-// export type SlackModal = Omit<View, "type">
+export type ActionBlockElement = (Button | Overflow | Datepicker | Select | RadioButtons | Checkboxes | Action)
 export interface SlackModal extends Omit<View, "type" | "submit" | "close" | "title"> {
     submit?: string
     close?: string
@@ -57,7 +57,7 @@ export class Slack {
         this.events?.on(event, listener)
     }
     private handleMessage(event: any) {
-        if (event.bot_id) {
+        if (event.bot_id || event.message?.bot_id) {
             return
         }
 
@@ -92,15 +92,36 @@ export class Slack {
         })
     }
 
-    public postError(channel: string, error: any) {
-        this.client.chat.postMessage({
-            channel: channel,
-            text: error.toString(),
+    public postError(options: {
+        channel: string,
+        threadTs?: string,
+        error: any
+    }) {
+        return this.postMessage({
+            channel: options.channel,
+            text: options.error.toString(),
+            thread_ts: options.threadTs,
             icon_emoji: ":x:"
         })
+        .catch(error => console.error("Error posting error\n", error))
     }
     public postMessage(options: ChatPostMessageArguments) {
         return this.client.chat.postMessage(options)
+        .then(result => {
+            if (result.error) {
+                throw result.error
+            }
+            return result
+        })
+    }
+    public updateMessage(options: ChatUpdateArguments) {
+        return this.client.chat.update(options)
+        .then(result => {
+            if (result.error) {
+                throw result.error
+            }
+            return result
+        })
     }
 
     public async getFile(url: string) {
@@ -221,7 +242,7 @@ export class SlackModalManager {
     /**
      * Pushes a modal onto the slack modal stack via the `response_action` method
      */
-    public push(options: ResponseActionModalPushArguments)
+    public push(options: ResponseActionModalPushArguments): any
 
     /**
      * Pushes a modal onto the slack modal stack via the `api` method
@@ -231,10 +252,7 @@ export class SlackModalManager {
         if (isResponseAction(options)) {
             return {
                 response_action: "push",
-                view: {
-                    type: "modal",
-                    ...options.modal
-                }
+                view: this.toView(options.modal)
             }
         }
 
@@ -396,14 +414,16 @@ export class SlackBlockFactory {
         text: string,
         actionId?: string,
         value?: string,
-        style?: "danger" | "primary"
+        style?: "danger" | "primary",
+        url?: string
     }): Button {
         return {
             type: "button",
             action_id: options.actionId,
             style: options.style,
             text: this.plainText(options.text),
-            value: options.value
+            value: options.value,
+            url: options.url
         }
     }
     public radioButtons(options: {
