@@ -45,7 +45,7 @@ export class Slack {
     }
 
     private events?: EventEmitter
-    private optionsByActionId: Record<string, Array<Option>> = {}
+    private optionsById: Record<string, Array<Option>> = {}
     private registeredDotCommands: EventEmitter = new EventEmitter()
 
     public client: WebClient
@@ -133,11 +133,11 @@ export class Slack {
         return response.data
     }
 
-    public storeOptions(actionId: string, options: Array<Option>) {
-        this.optionsByActionId[actionId] = options
+    public storeOptions(id: string, options: Array<Option>) {
+        this.optionsById[id] = options
     }
-    public getOptions(actionId: string) {
-        return this.optionsByActionId[actionId]
+    public getOptions(id: string) {
+        return this.optionsById[id]
     }
 
     private getViewInput(options: {
@@ -184,7 +184,7 @@ export class Slack {
             actionId: options.actionId
         })
 
-        return input?.selected_options.map(o => o.value)
+        return input?.selected_options?.map(o => o.value) || []
     }
     public getPlainTextValue(options: {
         view: View,
