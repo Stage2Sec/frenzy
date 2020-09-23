@@ -9,11 +9,21 @@ stop:
 	docker rm frenzy-slack-bot
 
 start:
+	./make-env.sh
 	docker run -d \
 	--name frenzy-slack-bot \
 	--restart=always \
 	--publish 3000:3000 \
-	--env-file .env \
+	--env-file frenzy.env \
 	frenzy-slack-bot:latest
 
-update: stop build start
+pull:
+	git pull
+
+update: stop pull build start
+
+attach:
+	docker container attach frenzy-slack-bot
+
+logs:
+	docker container logs frenzy-slack-bot

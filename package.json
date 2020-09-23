@@ -6,11 +6,11 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "clean": "rm -rf dist/",
-    "build": "npm run clean && tsc -b && ./copy-configs.sh",
+    "build": "npm run clean && tsc -b && ./copy-configs.sh && ./make-env.sh",
     "build-for-docker": "tsc -b",
     "start": "node dist/src/index.js"
   },
-  "author": "",
+  "author": "Joshua Roberts",
   "license": "ISC",
   "dependencies": {
     "@slack/events-api": "^2.3.4",
