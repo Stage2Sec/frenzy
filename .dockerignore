@@ -1,0 +1,8 @@
+Dockerfile
+.vscode
+node_modules
+dist
+Makefile
+make-env.sh
+**/*.env*
+**/README.md

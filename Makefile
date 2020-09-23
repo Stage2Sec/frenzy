@@ -1,7 +1,6 @@
 .DEFAULT_GOAL := start
 
 build:
-	rm -rf dist/ && rm -rf node_modules/
 	docker build -t frenzy-slack-bot .
 
 stop:
