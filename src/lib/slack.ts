@@ -42,12 +42,30 @@ export class Slack {
         this.on("message", this.handleMessage.bind(this))
 
         this.modals = new SlackModalManager(webClient)
+
+        this.appId = process.env.SLACK_APP_ID || ""
+        
+        this.client.auth.test()
+        .then((data: any) => {
+            this.bot = {
+                id: data.bot_id,
+                user: data.user,
+                userId: data.user_id
+            }
+        })
+        .catch(error => console.error("Error calling client.auth.test()", error))
     }
 
     private events?: EventEmitter
     private optionsById: Record<string, Array<Option>> = {}
     private registeredDotCommands: EventEmitter = new EventEmitter()
 
+    public appId: string
+    public bot = {
+        id: "",
+        user: "",
+        userId: ""
+    }
     public client: WebClient
     public interactions: SlackMessageAdapter
     
@@ -57,7 +75,7 @@ export class Slack {
         this.events?.on(event, listener)
     }
     private handleMessage(event: any) {
-        if (event.bot_id || event.message?.bot_id) {
+        if (this.isFromBot(event)) {
             return
         }
 
@@ -70,6 +88,11 @@ export class Slack {
                 }
             })
         }
+    }
+    private isFromBot(event: any): boolean {
+        let botId = event.bot_id || event.message?.bot_id
+        let userId = event.user_id || event.user || event.message?.user
+        return botId == this.bot.id || userId == this.bot.userId
     }
 
     public dotCommand(options: string | { command: string, parser?: commander.Command}, action: (event: any) => void) {
