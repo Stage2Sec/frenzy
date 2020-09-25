@@ -45,7 +45,9 @@
     "baseUrl": "./src",                       /* Base directory to resolve non-absolute module names. */
     "paths": {
       "@frenzy/*": ["lib/*"],
-      "@plugins/*": ["plugins/*"]
+      "@plugins/*": ["plugins/*"],
+      "@npk/*": ["plugins/npk/src/*"],
+      "@example/*": ["plugins/example/src/*"]
     },
     // "rootDirs": [],                        /* List of root folders whose combined content represents the structure of the project at runtime. */
     // "typeRoots": [],                       /* List of folders to include type definitions from. */
@@ -75,8 +77,5 @@
   "exclude": [
     "src/**/*.spec.js",
     "src/**/*.js"
-  ],
-  "references": [
-    { "path": "src/plugins" }
   ]
 }
