@@ -328,18 +328,22 @@ export class SlackModalManager {
 
 export class SlackBlockFactory {
     public section(options: {
-        text: string,
+        text?: string,
         blockId?: string,
         fields?: (PlainTextElement | MrkdwnElement)[],
         accessory?: Button | Overflow | Datepicker | Select | MultiSelect | Action | ImageElement | RadioButtons | Checkboxes,
         markdown?: boolean
     }): SectionBlock {
+        let text: any
+        if (options.text) {
+            text = options.markdown ? this.markdown(options.text) : this.plainText(options.text)
+        }
         return {
             type: "section",
             block_id: options.blockId,
             accessory: options.accessory,
             fields: options.fields,
-            text: options.markdown ? this.markdown(options.text) : this.plainText(options.text)
+            text: text
         }
     }
     public plainText(text: string): PlainTextElement{
