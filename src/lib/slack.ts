@@ -500,11 +500,13 @@ export class SlackBlockFactory {
         }
     }
     public plainTextInput(options: {
-        actionId: string
+        actionId: string,
+        multiline?: boolean
     }): PlainTextInput {
         return {
             type: "plain_text_input",
-            action_id: options.actionId
+            action_id: options.actionId,
+            multiline: options.multiline
         }
     }
 }

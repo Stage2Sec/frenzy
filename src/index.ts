@@ -17,6 +17,7 @@ const slackSigningSecret = process.env.SLACK_SIGNING_SECRET || "";
 const slackClient = new WebClient(slackToken);
 const slackInteractions = createMessageAdapter(slackSigningSecret);
 const slackEvents = createEventAdapter(slackSigningSecret);
+const slack : Slack = new Slack(slackClient, slackEvents, slackInteractions)
 
 // There is an issue with the typings for the SlackEventAdapter
 // where it thinks that the class doesn't inherit from the EventEmitter class
@@ -35,7 +36,6 @@ const pluginsLoaded: Array<PluginInfo> = [];
 
         let plugin: Plugin = require(`@plugins/${name}/`).default
 
-        let slack: Slack = new Slack(slackClient, slackEvents, slackInteractions)
         try {
             let info = plugin(slack)
             if (info instanceof Promise) {
@@ -50,8 +50,8 @@ const pluginsLoaded: Array<PluginInfo> = [];
 })()
 
 const app = express()
-app.use('/slack/actions', slackInteractions.expressMiddleware());
-app.use('/slack/events', slackEvents.expressMiddleware());
+app.use('/slack/actions', slackInteractions.requestListener());
+app.use('/slack/events', slackEvents.requestListener());
 
 app.listen(port, () => {
     console.log(`App listening at http://localhost:${port}`)
