@@ -79,7 +79,6 @@ export class Slack {
             return
         }
 
-        console.log("Received message: ", event)
         if (event.text) {
             event.text = event.text.trim()
             this.registeredDotCommands.eventNames().forEach(name => {
