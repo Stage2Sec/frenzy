@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"name": "Frenzy",
+			"path": "."
+		},
+		{
+			"name": "Npk Plugin",
+			"path": "src/plugins/npk"
+		},
+		{
+			"name": "Example Plugin",
+			"path": "src/plugins/example"
+		}
+	]
+}
