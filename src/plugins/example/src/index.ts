@@ -1,4 +1,4 @@
-import { Slack, Plugin, blockFactory } from "@frenzy/index"
+import { Slack, Plugin, blockFactory } from "@sm4rtshr1mp/frenzy-sdk"
 
 let slack: Slack
 
